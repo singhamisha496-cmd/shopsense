@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from app.database.connection import db
 from app.schemas.inventory import StockAdjustment
 from bson import ObjectId
+from pymongo import ReturnDocument
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
@@ -10,18 +11,19 @@ router = APIRouter(prefix="/inventory", tags=["Inventory"])
 @router.get("/")
 def get_inventory():
     products = list(db.products.find())
-
     inventory = []
 
     for product in products:
+        stock = product.get("stock_quantity", 0)
+
         inventory.append({
             "product_id": str(product["_id"]),
-            "product_name": product["name"],
-            "category": product["category"],
-            "stock_quantity": product["stock_quantity"],
+            "product_name": product.get("name", "Unknown Product"),
+            "category": product.get("category", "Uncategorized"),
+            "stock_quantity": stock,
             "stock_status": (
-                "Out of Stock" if product["stock_quantity"] == 0
-                else "Low Stock" if product["stock_quantity"] <= 5
+                "Out of Stock" if stock == 0
+                else "Low Stock" if stock <= 5
                 else "In Stock"
             )
         })
@@ -37,37 +39,57 @@ def adjust_stock(product_id: str, adjustment: StockAdjustment):
             detail="Invalid product ID format."
         )
 
-    product = db.products.find_one({"_id": ObjectId(product_id)})
-
-    if not product:
-        raise HTTPException(
-            status_code=404,
-            detail="Product not found."
-        )
-
-    current_stock = product["stock_quantity"]
+    product_object_id = ObjectId(product_id)
     quantity = adjustment.quantity
 
-    if adjustment.action == "sale":
-        if current_stock < quantity:
+    if adjustment.action == "restock":
+        updated_product = db.products.find_one_and_update(
+            {"_id": product_object_id},
+            {"$inc": {"stock_quantity": quantity}},
+            return_document=ReturnDocument.AFTER
+        )
+
+        if updated_product is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Product not found."
+            )
+
+    else:
+        updated_product = db.products.find_one_and_update(
+            {
+                "_id": product_object_id,
+                "stock_quantity": {"$gte": quantity}
+            },
+            {"$inc": {"stock_quantity": -quantity}},
+            return_document=ReturnDocument.AFTER
+        )
+
+        if updated_product is None:
+            product = db.products.find_one({"_id": product_object_id})
+
+            if product is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Product not found."
+                )
+
             raise HTTPException(
                 status_code=400,
                 detail="Insufficient stock for this sale."
             )
-        new_stock = current_stock - quantity
-    else:
-        new_stock = current_stock + quantity
 
-    db.products.update_one(
-        {"_id": ObjectId(product_id)},
-        {"$set": {"stock_quantity": new_stock}}
-    )
+    new_stock = updated_product["stock_quantity"]
 
     return {
         "message": "Inventory updated successfully",
         "product_id": product_id,
-        "previous_stock": current_stock,
         "quantity_changed": quantity,
         "action": adjustment.action,
-        "new_stock": new_stock
+        "new_stock": new_stock,
+        "stock_status": (
+            "Out of Stock" if new_stock == 0
+            else "Low Stock" if new_stock <= 5
+            else "In Stock"
+        )
     }

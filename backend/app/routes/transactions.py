@@ -13,6 +13,7 @@ router = APIRouter(
 
 @router.post("/")
 def create_transaction(transaction: TransactionCreate):
+
     # Validate product ID
     if not ObjectId.is_valid(transaction.product_id):
         raise HTTPException(
@@ -47,12 +48,28 @@ def create_transaction(transaction: TransactionCreate):
             detail="Vendor not found."
         )
 
+    # Verify product belongs to vendor
     if transaction.vendor_id != product["vendor_id"]:
         raise HTTPException(
             status_code=400,
             detail="This product does not belong to the specified vendor."
         )
 
+    # Check whether product is active
+    if product.get("status") != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot sell an inactive product."
+        )
+
+    # Check whether vendor is active
+    if vendor.get("status") != "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot record sales for an inactive vendor."
+        )
+
+    # Only completed payments count as sales
     if transaction.payment_status != "completed":
         raise HTTPException(
             status_code=400,
@@ -61,10 +78,11 @@ def create_transaction(transaction: TransactionCreate):
 
     quantity = transaction.quantity
 
-    # Prevent stock from going below zero
+    # Deduct stock only when sufficient stock is available
     result = db.products.update_one(
         {
             "_id": ObjectId(transaction.product_id),
+            "status": "active",
             "stock_quantity": {"$gte": quantity}
         },
         {
@@ -75,7 +93,7 @@ def create_transaction(transaction: TransactionCreate):
     if result.modified_count == 0:
         raise HTTPException(
             status_code=400,
-            detail="Insufficient stock available."
+            detail="Product is inactive or insufficient stock is available."
         )
 
     total_amount = round(
@@ -99,6 +117,11 @@ def create_transaction(transaction: TransactionCreate):
             detail="Could not save transaction; stock was restored."
         )
 
+    # Fetch actual remaining stock
+    updated_product = db.products.find_one({
+        "_id": ObjectId(transaction.product_id)
+    })
+
     return {
         "message": "Transaction recorded successfully",
         "transaction_id": str(saved.inserted_id),
@@ -106,7 +129,7 @@ def create_transaction(transaction: TransactionCreate):
         "quantity": quantity,
         "total_amount": total_amount,
         "currency": "INR",
-        "remaining_stock": product["stock_quantity"] - quantity
+        "remaining_stock": updated_product["stock_quantity"]
     }
 
 

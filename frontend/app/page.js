@@ -174,8 +174,9 @@ const updateStock = async (event) => {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          quantity_change: Number(stockChange),
-        }),
+  quantity: Math.abs(Number(stockChange)),
+  action: Number(stockChange) >= 0 ? "restock" : "sale",
+}),
       }
     );
 
