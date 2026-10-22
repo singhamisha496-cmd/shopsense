@@ -32,6 +32,14 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
 
+
+const handleLogout = () => {
+  localStorage.removeItem("shopsense_token");
+  localStorage.removeItem("shopsense_user");
+  window.location.href = "/login";
+};
+
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     setApiError("");
@@ -47,7 +55,13 @@ export default function Home() {
 
       const responses = await Promise.all(
         endpoints.map(async ([key, url]) => {
-          const response = await fetch(url);
+          const token = localStorage.getItem("shopsense_token");
+
+const response = await fetch(url, {
+  headers: {
+    Authorization: `Bearer ${token}`,
+  },
+});
           if (!response.ok) {
             throw new Error(`${key} API returned ${response.status}`);
           }
@@ -172,7 +186,10 @@ const updateStock = async (event) => {
       `${API}/inventory/${stockProductId}/adjust`,
       {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+  "Content-Type": "application/json",
+  Authorization: `Bearer ${localStorage.getItem("shopsense_token")}`,
+},
         body: JSON.stringify({
   quantity: Math.abs(Number(stockChange)),
   action: Number(stockChange) >= 0 ? "restock" : "sale",
@@ -216,18 +233,25 @@ const addProduct = async (event) => {
   setProductMessage("");
 
   try {
-    const response = await fetch(`${API}/products/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: productName,
-        description: productDescription,
-        price: Number(productPrice),
-        category: productCategory,
-        vendor_id: productVendor,
-        stock_quantity: Number(productStock),
-      }),
-    });
+    
+const token = localStorage.getItem("shopsense_token");
+
+const response = await fetch(`${API}/products/`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    name: productName,
+    description: productDescription,
+    price: Number(productPrice),
+    category: productCategory,
+    vendor_id: productVendor,
+    stock_quantity: Number(productStock),
+  }),
+});
+
 
     const data = await response.json();
 
@@ -269,16 +293,23 @@ const addVendor = async (event) => {
   setVendorMessage("");
 
   try {
-    const response = await fetch(`${API}/vendors/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: vendorName,
-        email: vendorEmail,
-        business_name: vendorBusiness,
-        address: vendorAddress,
-      }),
-    });
+    
+const token = localStorage.getItem("shopsense_token");
+
+const response = await fetch(`${API}/vendors/`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    name: vendorName,
+    email: vendorEmail,
+    business_name: vendorBusiness,
+    address: vendorAddress,
+  }),
+});
+
 
     const data = await response.json();
 
@@ -308,10 +339,22 @@ const addVendor = async (event) => {
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500 text-2xl font-bold shadow-lg shadow-indigo-500/30">
             S
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">ShopSense</h1>
-            <p className="text-xs text-slate-400">Commerce intelligence</p>
-          </div>
+          
+<div className="flex items-center justify-between gap-2">
+  <div>
+    <h1 className="text-xl font-bold tracking-tight">ShopSense</h1>
+    <p className="text-xs text-slate-400">Commerce intelligence</p>
+  </div>
+
+  <button
+    type="button"
+    onClick={handleLogout}
+    className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-white hover:bg-slate-700"
+  >
+    Logout
+  </button>
+</div>
+
         </div>
 
         <div className="px-4 pt-7">

@@ -1,13 +1,19 @@
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter, Depends, HTTPException
+from bson import ObjectId
+
 from app.database.connection import db
 from app.schemas.vendor import VendorCreate
-from bson import ObjectId
+from app.dependencies.auth import require_roles
 
 router = APIRouter(prefix="/vendors", tags=["Vendors"])
 
 
 @router.post("/")
-def create_vendor(vendor: VendorCreate):
+def create_vendor(
+    vendor: VendorCreate,
+    current_user: dict = Depends(require_roles("admin")),
+):
     vendor_data = vendor.model_dump()
     vendor_data["status"] = "active"
 
@@ -31,7 +37,9 @@ def create_vendor(vendor: VendorCreate):
 
 
 @router.get("/")
-def get_vendors():
+def get_vendors(
+    current_user: dict = Depends(require_roles("admin")),
+):
     vendors = list(db.vendors.find())
 
     for vendor in vendors:
@@ -41,7 +49,11 @@ def get_vendors():
 
 
 @router.patch("/{vendor_id}")
-def update_vendor(vendor_id: str, vendor: VendorCreate):
+def update_vendor(
+    vendor_id: str,
+    vendor: VendorCreate,
+    current_user: dict = Depends(require_roles("admin")),
+):
     if not ObjectId.is_valid(vendor_id):
         raise HTTPException(
             status_code=400,
@@ -84,7 +96,10 @@ def update_vendor(vendor_id: str, vendor: VendorCreate):
 
 
 @router.delete("/{vendor_id}")
-def delete_vendor(vendor_id: str):
+def delete_vendor(
+    vendor_id: str,
+    current_user: dict = Depends(require_roles("admin")),
+):
     if not ObjectId.is_valid(vendor_id):
         raise HTTPException(
             status_code=400,
