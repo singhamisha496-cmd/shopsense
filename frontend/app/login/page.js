@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -20,26 +19,49 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      
-const response = await fetch(`${API}/auth/login`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({ email, password }),
-});
+      const response = await fetch(`${API}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      });
+
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Login failed.");
+        throw new Error(
+          data.detail || "Login failed. Please check your email and password."
+        );
       }
 
+      if (!data.access_token || !data.user) {
+        throw new Error("Invalid response received from the server.");
+      }
+
+      // Save login information
       localStorage.setItem("shopsense_token", data.access_token);
       localStorage.setItem("shopsense_user", JSON.stringify(data.user));
 
-      router.push("/");
+      // Redirect according to the user's role
+      if (data.user.role === "admin") {
+        router.push("/admin");
+      } else if (data.user.role === "vendor") {
+        router.push("/vendor");
+      } else if (data.user.role === "customer") {
+        router.push("/customer");
+      } else {
+        localStorage.removeItem("shopsense_token");
+        localStorage.removeItem("shopsense_user");
+        throw new Error("Unknown account role. Please contact support.");
+      }
     } catch (err) {
-      setError(err.message || "Unable to connect to the backend.");
+      setError(
+        err.message || "Unable to connect to the backend. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -145,6 +167,7 @@ const response = await fetch(`${API}/auth/login`, {
               padding: "10px",
               borderRadius: "8px",
               fontSize: "14px",
+              overflowWrap: "anywhere",
             }}
           >
             {error}
@@ -180,6 +203,28 @@ const response = await fetch(`${API}/auth/login`, {
           }}
         >
           Secure login powered by ShopSense
+        </p>
+
+        <p
+          style={{
+            textAlign: "center",
+            fontSize: "14px",
+            color: "#4b5563",
+            marginTop: "16px",
+            marginBottom: "0",
+          }}
+        >
+          Don&apos;t have an account?{" "}
+          <a
+            href="/signup"
+            style={{
+              color: "#4f46e5",
+              fontWeight: "600",
+              textDecoration: "none",
+            }}
+          >
+            Sign up
+          </a>
         </p>
       </form>
     </main>

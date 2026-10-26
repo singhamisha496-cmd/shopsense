@@ -10,6 +10,7 @@ from app.routes.inventory import router as inventory_router
 from app.routes.transactions import router as transactions_router
 from app.routes.analytics import router as analytics_router
 from app.routes.auth import router as auth_router
+from app.routes.orders import router as orders_router
 app = FastAPI(
     title="ShopSense API",
     description="Multi-Vendor E-Commerce Analytics Platform",
@@ -60,3 +61,4 @@ app.include_router(inventory_router)
 app.include_router(transactions_router)
 app.include_router(analytics_router)
 app.include_router(auth_router)
+app.include_router(orders_router)

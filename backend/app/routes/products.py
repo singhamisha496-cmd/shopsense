@@ -32,7 +32,7 @@ def create_product(
 
     # Vendors can add products only to their own vendor account.
     if current_user["role"] == "vendor":
-        if vendor.get("user_id") != current_user["id"]:
+        if str(vendor.get("user_id")) != str(current_user["id"]):
             raise HTTPException(
                 status_code=403,
                 detail="You can only create products for your own vendor account."
@@ -50,7 +50,9 @@ def create_product(
 
 @router.get("/")
 def get_products(
-    current_user: dict = Depends(require_roles("admin", "vendor", "customer"))
+    current_user: dict = Depends(
+        require_roles("admin", "vendor", "customer")
+    )
 ):
     products = list(db.products.find())
 
@@ -73,7 +75,9 @@ def update_product(
         )
 
     product_object_id = ObjectId(product_id)
-    existing_product = db.products.find_one({"_id": product_object_id})
+    existing_product = db.products.find_one(
+        {"_id": product_object_id}
+    )
 
     if not existing_product:
         raise HTTPException(
@@ -81,21 +85,30 @@ def update_product(
             detail="Product not found."
         )
 
-    # Vendors can update only products belonging to their own vendor account.
+    # Vendors can update only their own products.
     if current_user["role"] == "vendor":
-        if existing_product.get("vendor_id") is None:
+        existing_vendor_id = existing_product.get("vendor_id")
+
+        if existing_vendor_id is None:
             raise HTTPException(
                 status_code=403,
                 detail="This product is not linked to a vendor account."
             )
 
-        vendor_id = existing_product["vendor_id"]
-        if isinstance(vendor_id, str) and ObjectId.is_valid(vendor_id):
-            vendor_id = ObjectId(vendor_id)
+        if isinstance(existing_vendor_id, str):
+            if not ObjectId.is_valid(existing_vendor_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Invalid vendor association for this product."
+                )
+            existing_vendor_id = ObjectId(existing_vendor_id)
 
-        vendor = db.vendors.find_one({"_id": vendor_id})
+        vendor = db.vendors.find_one({"_id": existing_vendor_id})
 
-        if not vendor or vendor.get("user_id") != current_user["id"]:
+        if (
+            not vendor
+            or str(vendor.get("user_id")) != str(current_user["id"])
+        ):
             raise HTTPException(
                 status_code=403,
                 detail="You can only update your own products."
@@ -119,13 +132,13 @@ def update_product(
         )
 
     if current_user["role"] == "vendor":
-        if vendor.get("user_id") != current_user["id"]:
+        if str(vendor.get("user_id")) != str(current_user["id"]):
             raise HTTPException(
                 status_code=403,
                 detail="You can only assign products to your own vendor account."
             )
 
-    # Preserve the product's existing status.
+    # Preserve the existing product status.
     product_data["status"] = existing_product.get("status", "active")
 
     db.products.update_one(
@@ -142,7 +155,9 @@ def update_product(
 @router.delete("/{product_id}")
 def delete_product(
     product_id: str,
-    current_user: dict = Depends(require_roles("admin"))
+    current_user: dict = Depends(
+        require_roles("admin", "vendor")
+    )
 ):
     if not ObjectId.is_valid(product_id):
         raise HTTPException(
@@ -150,7 +165,54 @@ def delete_product(
             detail="Invalid product ID format."
         )
 
-    result = db.products.delete_one({"_id": ObjectId(product_id)})
+    product_object_id = ObjectId(product_id)
+
+    # First, verify that the product exists.
+    existing_product = db.products.find_one(
+        {"_id": product_object_id}
+    )
+
+    if not existing_product:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found."
+        )
+
+    # Admins can delete any product.
+    # Vendors can delete only products linked to their own profile.
+    if current_user["role"] == "vendor":
+        existing_vendor_id = existing_product.get("vendor_id")
+
+        if existing_vendor_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="This product is not linked to a vendor account."
+            )
+
+        if isinstance(existing_vendor_id, str):
+            if not ObjectId.is_valid(existing_vendor_id):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Invalid vendor association for this product."
+                )
+            existing_vendor_id = ObjectId(existing_vendor_id)
+
+        vendor = db.vendors.find_one(
+            {"_id": existing_vendor_id}
+        )
+
+        if (
+            not vendor
+            or str(vendor.get("user_id")) != str(current_user["id"])
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="You can only delete your own products."
+            )
+
+    result = db.products.delete_one(
+        {"_id": product_object_id}
+    )
 
     if result.deleted_count == 0:
         raise HTTPException(
